@@ -262,6 +262,18 @@ function App() {
               expanded={true}
             />
           </div>
+
+          <div className="mt-auto pt-8 flex flex-col items-center border-t border-white/5">
+            <span className="text-[10px] font-black uppercase tracking-[0.4em] text-white/10 mb-2 italic">Crafted By</span>
+            <a
+              href="https://a-generative-slice.github.io/A-generative-slice/"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-[11px] font-black text-primary-400/40 hover:text-primary-400 hover:scale-110 transition-all duration-500 tracking-tighter"
+            >
+              A-GENERATIVE-SLICE
+            </a>
+          </div>
         </div>
       </aside>
 
