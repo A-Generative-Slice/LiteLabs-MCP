@@ -20,3 +20,4 @@ Thumbs.db
 backend/chroma_db/
 backend/test_docs/
 frontend/test_docs/
+backend/app/chat_sessions.json

@@ -1,4 +1,4 @@
-from fastapi import FastAPI, Depends, HTTPException, status
+from fastapi import FastAPI, Depends, HTTPException, status, BackgroundTasks
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
@@ -8,6 +8,7 @@ from .rag_engine import RAGEngine
 from .parsers import DocumentParser
 from .chat_engine import ChatEngine
 from .doc_generator import DocumentGenerator
+from .chat_storage import ChatStorage
 from datetime import datetime, timedelta
 from jose import JWTError, jwt
 import bcrypt
@@ -41,6 +42,8 @@ class User(BaseModel):
 
 class QueryRequest(BaseModel):
     text: str
+    session_id: Optional[str] = None
+    directory_path: Optional[str] = None
 
 class IndexRequest(BaseModel):
     directory_path: str
@@ -49,12 +52,14 @@ class SettingsRequest(BaseModel):
     mode: str
     openai_key: Optional[str] = None
     openrouter_key: Optional[str] = None
+    gemini_key: Optional[str] = None
     openrouter_model: Optional[str] = None
     local_model: Optional[str] = None
 
 # In-memory session or could use SQLite for more persistence
 rag_engine = RAGEngine()
 chat_engine = ChatEngine()
+chat_storage = ChatStorage(storage_path=os.path.dirname(os.path.abspath(__file__)))
 
 # Mock user for local access
 # Password: admin123
@@ -104,11 +109,14 @@ async def login_for_access_token(form_data: OAuth2PasswordRequestForm = Depends(
     return {"access_token": access_token, "token_type": "bearer"}
 
 @app.post("/index")
-async def index_directory(request: IndexRequest):
+async def index_data(request: IndexRequest, background_tasks: BackgroundTasks):
     if not os.path.exists(request.directory_path):
-        raise HTTPException(status_code=400, detail="Directory does not exist")
-    rag_engine.index_directory(request.directory_path)
-    return {"status": "success", "message": f"Indexed {request.directory_path}"}
+        raise HTTPException(status_code=400, detail="Path does not exist")
+    
+    # Run indexing in background to avoid blocking
+    background_tasks.add_task(rag_engine.index_directory, request.directory_path)
+    
+    return {"status": "success", "message": f"Started indexing {request.directory_path} in the background"}
 
 @app.post("/query")
 async def query_data(request: QueryRequest):
@@ -120,10 +128,38 @@ async def query_data(request: QueryRequest):
     # Generate response using ChatEngine
     response = await chat_engine.generate_response(request.text, context)
     
+    sources = [res['metadata']['source'] for res in results]
+    
+    # Save to storage if session_id and directory_path provided
+    if request.session_id and request.directory_path:
+        chat_storage.add_message(request.session_id, "user", request.text)
+        chat_storage.add_message(request.session_id, "assistant", response, sources)
+    
     return {
         "answer": response,
-        "sources": [res['metadata']['source'] for res in results]
+        "sources": sources
     }
+
+@app.get("/sessions")
+async def get_sessions(directory_path: str):
+    return {"sessions": chat_storage.get_sessions_for_directory(directory_path)}
+
+@app.post("/sessions")
+async def create_session(request: IndexRequest):
+    session_id = chat_storage.create_session(request.directory_path)
+    return {"session_id": session_id}
+
+@app.get("/sessions/{session_id}")
+async def get_session(session_id: str):
+    session = chat_storage.get_session(session_id)
+    if not session:
+        raise HTTPException(status_code=404, detail="Session not found")
+    return session
+
+@app.delete("/sessions/{session_id}")
+async def delete_session(session_id: str):
+    chat_storage.delete_session(session_id)
+    return {"status": "success", "message": "Session deleted"}
 
 @app.post("/export")
 async def export_document(request: QueryRequest, format: str = "pdf"):
@@ -154,15 +190,18 @@ async def list_indexed_files():
 @app.post("/settings")
 async def update_settings(request: SettingsRequest):
     chat_engine.mode = request.mode
-    if request.openai_key:
-        chat_engine.openai_client = OpenAI(api_key=request.openai_key)
-    if request.openrouter_key:
-        chat_engine.openrouter_api_key = request.openrouter_key
+    # Always update the keys from the request
+    if request.openai_key is not None:
+        chat_engine.openai_client = OpenAI(api_key=request.openai_key) if request.openai_key else None
+        
+    chat_engine.openrouter_api_key = request.openrouter_key
+    chat_engine.gemini_key = request.gemini_key
+    
     if request.openrouter_model:
         chat_engine.openrouter_model = request.openrouter_model
     if request.local_model:
         chat_engine.local_model = request.local_model
-    return {"status": "success", "message": "Settings updated"}
+    return {"status": "success", "message": f"Mode set to {request.mode}"}
 
 @app.get("/browse")
 async def browse_directory(path: Optional[str] = None):

@@ -32,52 +32,67 @@ function DirectoryPicker({ onSelect, onCancel }: { onSelect: (path: string) => v
 
   return (
     <div className="flex flex-col h-[400px]">
-      <div className="flex items-center gap-2 mb-4 p-2 bg-white/5 rounded-lg text-xs font-mono truncate">
-        <Folder size={14} className="text-primary-400 shrink-0" />
+      <div className="flex items-center gap-2 mb-6 p-3 bg-white/5 rounded-xl text-xs font-mono">
+        <Folder size={16} className="text-primary-400 shrink-0" />
         <span className="truncate text-white/60">{currentPath}</span>
       </div>
 
-      <div className="flex-1 overflow-y-auto space-y-1 mb-4 pr-2 custom-scrollbar">
+      <div className="flex-1 overflow-y-auto space-y-2 mb-4 pr-2 custom-scrollbar">
         {currentPath !== parentPath && (
           <button
             onClick={() => fetchDocs(parentPath)}
-            className="w-full text-left p-2 hover:bg-white/5 rounded-lg flex items-center gap-2 text-sm text-white/40 italic"
+            className="w-full text-left p-3 hover:bg-white/5 rounded-xl flex items-center gap-3 text-sm text-white/40 font-bold"
           >
-            .. (Back)
+            ← Back
           </button>
         )}
 
         {isLoading ? (
-          <div className="flex justify-center py-8"><Loader2 className="animate-spin text-primary-500" /></div>
+          <div className="flex justify-center py-12"><Loader2 className="animate-spin text-primary-500" /></div>
         ) : (
           items.map((item, i) => (
-            <button
+            <div
               key={i}
-              onClick={() => item.is_directory ? fetchDocs(item.path) : null}
               className={twMerge(
-                "w-full text-left p-2 rounded-lg flex items-center gap-3 text-sm transition-all",
-                item.is_directory ? "hover:bg-white/10 text-white/80" : "opacity-40 cursor-default"
+                "w-full flex items-center justify-between p-2 rounded-xl transition-all border border-transparent",
+                item.is_directory ? "hover:bg-white/5 hover:border-white/10" : "opacity-30"
               )}
             >
-              <Folder size={16} className={item.is_directory ? "text-primary-400" : "text-white/20"} />
-              <span className="truncate">{item.name}</span>
-            </button>
+              <button
+                onClick={() => item.is_directory ? fetchDocs(item.path) : null}
+                className={twMerge(
+                  "flex-1 text-left p-2 flex items-center gap-4 text-sm font-semibold",
+                  item.is_directory ? "text-white/90" : "cursor-default"
+                )}
+              >
+                <Folder size={20} className={item.is_directory ? "text-primary-400" : "text-white/20"} />
+                <span className="truncate">{item.name}</span>
+              </button>
+              {item.is_directory && (
+                <button
+                  onClick={() => onSelect(item.path)}
+                  className="px-4 py-2 bg-primary-600 rounded-lg text-xs font-black uppercase tracking-tighter hover:bg-primary-500 transition-all shadow-lg shadow-primary-900/40"
+                >
+                  Confirm
+                </button>
+              )}
+            </div>
           ))
         )}
       </div>
 
-      <div className="flex gap-4 pt-4 border-t border-white/10">
+      <div className="flex gap-4 pt-6 border-t border-white/10">
         <button
           onClick={onCancel}
-          className="flex-1 py-2 text-white/60 hover:text-white"
+          className="flex-1 py-3 text-white/40 hover:text-white font-bold transition-all"
         >
           Cancel
         </button>
         <button
           onClick={() => onSelect(currentPath)}
-          className="flex-1 py-2 bg-primary-600 rounded-lg font-bold hover:bg-primary-500 transition-all"
+          className="flex-1 py-3 bg-white/10 text-white rounded-xl font-black uppercase tracking-widest hover:bg-white/20 transition-all text-[10px]"
         >
-          Select Folder
+          Index Folder Root
         </button>
       </div>
     </div>
@@ -86,20 +101,52 @@ function DirectoryPicker({ onSelect, onCancel }: { onSelect: (path: string) => v
 
 function App() {
   const [activeTab, setActiveTab] = useState('chat');
-  const [isSidebarOpen, setSidebarOpen] = useState(true);
   const [isIndexModalOpen, setIndexModalOpen] = useState(false);
   const [isPickerMode, setIsPickerMode] = useState(false);
   const [manualPath, setManualPath] = useState('');
   const [indexStats, setIndexStats] = useState({ indexing: false, path: '' });
+  const [activeDirectory, setActiveDirectory] = useState<string>('');
+  const [currentSessionId, setCurrentSessionId] = useState<string>('');
+  const [sessions, setSessions] = useState<any[]>([]);
+
+  const fetchSessions = async (dir: string) => {
+    try {
+      const resp = await axios.get(`${API_BASE}/sessions`, { params: { directory_path: dir } });
+      setSessions(resp.data.sessions);
+      if (resp.data.sessions.length > 0) {
+        // Don't auto-switch if we already have one
+        if (!currentSessionId) setCurrentSessionId(resp.data.sessions[0].id);
+      } else {
+        createNewSession(dir);
+      }
+    } catch (err) {
+      console.error("Error fetching sessions");
+    }
+  };
+
+  const createNewSession = async (dir: string) => {
+    try {
+      const resp = await axios.post(`${API_BASE}/sessions`, { directory_path: dir });
+      const newSid = resp.data.session_id;
+      setCurrentSessionId(newSid);
+      const sessionResp = await axios.get(`${API_BASE}/sessions/${newSid}`);
+      setSessions(prev => [sessionResp.data, ...prev]);
+    } catch (err) {
+      alert("Error creating session");
+    }
+  };
 
   const handleIndex = async (path: string) => {
     if (!path.trim()) return;
     setIndexStats({ indexing: true, path });
     try {
       await axios.post(`${API_BASE}/index`, { directory_path: path });
+      setActiveDirectory(path);
+      fetchSessions(path);
       setIndexModalOpen(false);
       setIsPickerMode(false);
       setManualPath('');
+      setActiveTab('chat');
     } catch (err) {
       alert('Error indexing directory');
     } finally {
@@ -133,10 +180,10 @@ function App() {
                     />
                     <button
                       onClick={() => setIsPickerMode(true)}
-                      className="w-full py-2 bg-white/5 border border-white/10 hover:bg-white/10 rounded-lg flex items-center justify-center gap-2 text-sm transition-all"
+                      className="w-full py-3 bg-white/5 border border-white/10 hover:bg-white/10 rounded-xl flex items-center justify-center gap-2 text-sm font-semibold transition-all"
                     >
-                      <Folder size={16} className="text-primary-400" />
-                      Browse Files
+                      <Folder size={18} className="text-primary-400" />
+                      Browse PC Directories
                     </button>
                   </div>
                   <div className="flex gap-4">
@@ -165,72 +212,93 @@ function App() {
         )}
       </AnimatePresence>
 
-      {/* Sidebar */}
-      <motion.aside
-        initial={false}
-        animate={{ width: isSidebarOpen ? 260 : 80 }}
-        className="glass-morphism h-[calc(100vh-2rem)] m-4 flex flex-col items-center py-8 z-20 relative"
-      >
-        <button
-          onClick={() => setSidebarOpen(!isSidebarOpen)}
-          className="absolute -right-3 top-10 bg-primary-600 rounded-full p-1 border border-white/20 hover:scale-110 transition-transform z-30"
-        >
-          <SettingsIcon size={14} className={isSidebarOpen ? "rotate-180" : ""} />
-        </button>
-        <div className="flex flex-col gap-6 w-full px-4">
+      {/* Sidebar - FIXED WIDTH, NO TOGGLE */}
+      <aside className="glass-morphism w-[280px] h-[calc(100vh-2rem)] m-4 flex flex-col py-8 z-20 relative px-4 shrink-0">
+        <div className="flex flex-col gap-6 w-full">
           <NavItem
             icon={<Home />}
             label="Dashboard"
             active={activeTab === 'chat'}
             onClick={() => setActiveTab('chat')}
-            expanded={isSidebarOpen}
+            expanded={true}
           />
           <NavItem
             icon={<Folder />}
             label="Files"
             active={activeTab === 'files'}
             onClick={() => setActiveTab('files')}
-            expanded={isSidebarOpen}
+            expanded={true}
           />
           <div className="mt-auto pt-6 border-t border-white/10">
+            {activeTab === 'chat' && activeDirectory && (
+              <div className="mb-6">
+                <div className="flex items-center justify-between mb-3 px-2">
+                  <span className="text-[10px] font-black uppercase tracking-widest text-white/30">Past Chats</span>
+                  <button onClick={() => createNewSession(activeDirectory)} className="p-1 hover:bg-white/10 rounded-md text-primary-400 transition-all">
+                    <Send size={12} className="-rotate-45" />
+                  </button>
+                </div>
+                <div className="space-y-1 max-h-[250px] overflow-y-auto custom-scrollbar px-1">
+                  {sessions.map(s => (
+                    <button
+                      key={s.id}
+                      onClick={() => setCurrentSessionId(s.id)}
+                      className={twMerge(
+                        "w-full text-left p-2.5 rounded-xl text-xs truncate transition-all",
+                        currentSessionId === s.id ? "bg-primary-500/20 text-primary-400 border border-primary-500/20" : "text-white/40 hover:bg-white/5 hover:text-white"
+                      )}
+                    >
+                      {s.name}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
             <NavItem
-              icon={<SettingsIcon />}
+              icon={<SettingsIcon size={20} />}
               label="Settings"
               active={activeTab === 'settings'}
               onClick={() => setActiveTab('settings')}
-              expanded={isSidebarOpen}
+              expanded={true}
             />
           </div>
         </div>
-      </motion.aside>
+      </aside>
 
       {/* Main Content */}
       <main className="flex-1 h-screen overflow-y-auto p-8 relative">
         <header className="mb-12 flex justify-between items-center">
           <div>
             <h1 className="text-4xl font-bold bg-gradient-to-r from-primary-400 to-primary-600 bg-clip-text text-transparent">
-              MCP-LiteLabs
+              Local Intelligence
             </h1>
-            <p className="text-white/50 mt-2">Secure Local Data Intelligence Powered by MCP</p>
+            {activeDirectory ? (
+              <div className="flex items-center gap-2 mt-2 px-3 py-1.5 bg-primary-500/10 border border-primary-500/20 rounded-xl w-fit">
+                <Folder size={14} className="text-primary-400" />
+                <span className="text-sm font-bold text-primary-400 truncate max-w-[300px]">{activeDirectory.split('/').pop()}</span>
+                <span className="text-[10px] text-white/20 font-mono hidden md:inline ml-2">{activeDirectory}</span>
+              </div>
+            ) : (
+              <p className="text-white/50 mt-2 italic font-medium">Simple. Private. Powerful.</p>
+            )}
             <div className="mt-4 flex gap-2">
-              <span className="text-xs px-2 py-1 bg-white/5 rounded border border-white/10 text-white/40">Privacy First</span>
-              <span className="text-xs px-2 py-1 bg-white/5 rounded border border-white/10 text-white/40">Local RAG</span>
-              <span className="text-xs px-2 py-1 bg-white/5 rounded border border-white/10 text-white/40">Offline Mode</span>
+              <span className="text-[10px] uppercase tracking-widest px-2 py-0.5 bg-primary-500/10 rounded border border-primary-500/20 text-primary-400/80 font-bold">Privacy First</span>
+              <span className="text-[10px] uppercase tracking-widest px-2 py-0.5 bg-primary-500/10 rounded border border-primary-500/20 text-primary-400/80 font-bold">Local RAG</span>
             </div>
           </div>
           <div className="flex gap-4">
             <button
               onClick={() => setIndexModalOpen(true)}
-              className="px-6 py-2 glass-morphism hover:bg-white/10 transition-all font-semibold flex items-center gap-2"
+              className="px-6 py-2.5 bg-primary-600 hover:bg-primary-500 rounded-xl transition-all font-bold flex items-center gap-2 shadow-lg shadow-primary-900/20"
             >
               <Folder size={18} />
-              New Index
+              Add Folder
             </button>
           </div>
         </header>
 
         <section className="max-w-5xl mx-auto h-[calc(100vh-16rem)] flex flex-col">
-          {activeTab === 'chat' && <ChatInterface />}
+          {activeTab === 'chat' && <ChatInterface activeDirectory={activeDirectory} sessionId={currentSessionId} />}
           {activeTab === 'files' && <FileManager />}
           {activeTab === 'settings' && <SettingsView />}
         </section>
@@ -267,15 +335,46 @@ interface Message {
   sources?: string[];
 }
 
-function ChatInterface() {
+function ChatInterface({ activeDirectory, sessionId }: { activeDirectory: string, sessionId: string }) {
   const [messages, setMessages] = useState<Message[]>([
     { role: 'assistant', content: 'Hello! I can help you analyze your local files. Start by indexing a folder or ask me anything if you\'ve already done so.' }
   ]);
   const [input, setInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
 
+  useEffect(() => {
+    if (sessionId) {
+      fetchHistory();
+    } else {
+      setMessages([{ role: 'assistant', content: 'Hello! Please select a folder to start chatting.' }]);
+    }
+  }, [sessionId]);
+
+  const fetchHistory = async () => {
+    try {
+      const resp = await axios.get(`${API_BASE}/sessions/${sessionId}`);
+      if (resp.data.messages.length > 0) {
+        setMessages(resp.data.messages);
+      } else {
+        setMessages([{ role: 'assistant', content: `Start chatting about ${activeDirectory.split('/').pop()}` }]);
+      }
+    } catch (err) {
+      console.error("Error fetching history");
+    }
+  };
+
+  const clearChat = async () => {
+    if (!sessionId) return;
+    try {
+      await axios.delete(`${API_BASE}/sessions/${sessionId}`);
+      setMessages([{ role: 'assistant', content: 'Chat history cleared. Start fresh!' }]);
+    } catch (err) {
+      alert('Error clearing chat');
+    }
+  };
+
   const sendMessage = async () => {
-    if (!input.trim()) return;
+    if (!input.trim() || !activeDirectory) return;
 
     const userMsg: Message = { role: 'user', content: input };
     setMessages(prev => [...prev, userMsg]);
@@ -283,14 +382,18 @@ function ChatInterface() {
     setIsLoading(true);
 
     try {
-      const resp = await axios.post(`${API_BASE}/query`, { text: input });
+      const resp = await axios.post(`${API_BASE}/query`, {
+        text: input,
+        session_id: sessionId,
+        directory_path: activeDirectory
+      });
       setMessages(prev => [...prev, {
         role: 'assistant',
         content: resp.data.answer,
         sources: resp.data.sources
       }]);
     } catch (err) {
-      setMessages(prev => [...prev, { role: 'assistant', content: 'Sorry, I encountered an error connecting to the backend.' }]);
+      setMessages(prev => [...prev, { role: 'assistant', content: 'An error occurred. Please check your API key or Local Model settings.' }]);
     } finally {
       setIsLoading(false);
     }
@@ -321,7 +424,15 @@ function ChatInterface() {
   return (
     <div className="flex-1 flex flex-col glass-morphism p-6 h-full relative overflow-hidden">
       <div className="flex justify-between items-center mb-4">
-        <h3 className="font-semibold text-white/60">AI Conversation</h3>
+        <div className="flex items-center gap-3">
+          <h3 className="font-semibold text-white/60">AI Conversation</h3>
+          <button
+            onClick={clearChat}
+            className="text-[10px] font-black uppercase tracking-widest px-2 py-1 bg-white/5 hover:bg-white/10 rounded-md text-white/40 transition-all border border-white/5"
+          >
+            Clear History
+          </button>
+        </div>
         <div className="flex gap-2">
           <button
             onClick={() => handleExport('pdf')}
@@ -430,135 +541,165 @@ function FileManager() {
   );
 }
 
+const FREE_MODELS = [
+  { name: 'Gemini 2.0 Flash (Fastest)', id: 'google/gemini-2.0-flash-exp:free' },
+  { name: 'Mistral Small 24B', id: 'mistralai/mistral-small-24b-instruct-2501:free' },
+  { name: 'Llama 3.3 70B', id: 'meta-llama/llama-3.3-70b-instruct:free' },
+  { name: 'Qwen 2 72B', id: 'qwen/qwen-2-72b-instruct:free' },
+];
+
 function SettingsView() {
-  const [mode, setMode] = useState<'LOCAL' | 'CLOUD' | 'OPENROUTER'>('LOCAL');
-  const [openaiKey, setOpenaiKey] = useState('');
-  const [openrouterKey, setOpenrouterKey] = useState('');
-  const [openrouterModel, setOpenrouterModel] = useState('google/gemini-2.0-flash-exp:free');
+  const [mode, setMode] = useState<'LOCAL' | 'OPENROUTER' | 'GEMINI'>('LOCAL');
+  const [cloudMode, setCloudMode] = useState<'OPENROUTER' | 'GEMINI'>('GEMINI');
+  const [apiKey, setApiKey] = useState('');
   const [localModel, setLocalModel] = useState('llama3');
+  const [selectedFreeModel, setSelectedFreeModel] = useState(FREE_MODELS[0].id);
+  const [activeBackendMode, setActiveBackendMode] = useState<string>('LOCAL');
+
+  // Auto-detect key type and switch tabs + mode
+  useEffect(() => {
+    if (apiKey.startsWith('sk-or-')) {
+      setCloudMode('OPENROUTER');
+      setMode('OPENROUTER'); // Auto-enable cloud if key is pasted
+    } else if (apiKey.startsWith('AIza')) {
+      setCloudMode('GEMINI');
+      setMode('GEMINI'); // Auto-enable cloud if key is pasted
+    }
+  }, [apiKey]);
 
   const saveSettings = async () => {
     try {
-      await axios.post(`${API_BASE}/settings`, {
+      const resp = await axios.post(`${API_BASE}/settings`, {
         mode,
-        openai_key: openaiKey,
-        openrouter_key: openrouterKey,
-        openrouter_model: openrouterModel,
+        openrouter_key: (mode === 'OPENROUTER' || (mode === 'LOCAL' && cloudMode === 'OPENROUTER')) ? apiKey : '',
+        gemini_key: (mode === 'GEMINI' || (mode === 'LOCAL' && cloudMode === 'GEMINI')) ? apiKey : '',
+        openrouter_model: selectedFreeModel,
         local_model: localModel
       });
-      alert('Settings applied successfully!');
+      setActiveBackendMode(mode);
+      alert(`Settings saved! Active Mode: ${mode}`);
     } catch (err) {
       alert('Error saving settings');
     }
   };
 
-  const freeModels = [
-    { name: 'Gemini 2.0 Flash (Free)', id: 'google/gemini-2.0-flash-exp:free' },
-    { name: 'Llama 3.1 8B (Free)', id: 'meta-llama/llama-3.1-8b-instruct:free' },
-    { name: 'Mistral 7B (Free)', id: 'mistralai/mistral-7b-instruct:free' },
-  ];
+  const isGeminiKey = apiKey.startsWith('AIza');
+  const isOpenRouterKey = apiKey.startsWith('sk-or-');
+  const keyWarning = (cloudMode === 'GEMINI' && isOpenRouterKey) || (cloudMode === 'OPENROUTER' && isGeminiKey);
 
   return (
     <div className="flex-1 glass-morphism p-8 max-w-2xl mx-auto w-full overflow-y-auto custom-scrollbar">
-      <h2 className="text-2xl font-semibold mb-8 flex items-center gap-3">
-        <SettingsIcon className="text-primary-400" />
-        System Settings
-      </h2>
-
-      <div className="space-y-10">
-        <div className="space-y-4">
-          <label className="text-sm font-medium text-white/60 uppercase tracking-wider">Intelligence Source</label>
-          <div className="grid grid-cols-3 gap-3">
-            <button
-              onClick={() => setMode('LOCAL')}
-              className={twMerge(
-                "py-3 rounded-xl border transition-all text-sm font-bold",
-                mode === 'LOCAL' ? "bg-primary-600 border-primary-500 shadow-lg" : "bg-white/5 border-white/10 text-white/40 hover:bg-white/10"
-              )}
-            >
-              Ollama
-            </button>
-            <button
-              onClick={() => setMode('OPENROUTER')}
-              className={twMerge(
-                "py-3 rounded-xl border transition-all text-sm font-bold",
-                mode === 'OPENROUTER' ? "bg-primary-600 border-primary-500 shadow-lg" : "bg-white/5 border-white/10 text-white/40 hover:bg-white/10"
-              )}
-            >
-              OpenRouter
-            </button>
-            <button
-              onClick={() => setMode('CLOUD')}
-              className={twMerge(
-                "py-3 rounded-xl border transition-all text-sm font-bold",
-                mode === 'CLOUD' ? "bg-primary-600 border-primary-500 shadow-lg" : "bg-white/5 border-white/10 text-white/40 hover:bg-white/10"
-              )}
-            >
-              Direct AI
-            </button>
-          </div>
+      <div className="flex justify-between items-center mb-10">
+        <h2 className="text-2xl font-bold flex items-center gap-3">Settings</h2>
+        <div className="px-3 py-1 bg-primary-500/10 border border-primary-500/20 rounded-full text-[10px] font-black text-primary-400 uppercase tracking-widest">
+          Active: {activeBackendMode}
         </div>
+      </div>
 
-        {mode === 'LOCAL' && (
-          <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="space-y-4">
-            <div className="space-y-2">
-              <label className="text-xs font-semibold text-white/40">Ollama API URL</label>
-              <input type="text" defaultValue="http://localhost:11434/v1" className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 focus:border-primary-500 outline-none" />
-            </div>
-            <div className="space-y-2">
-              <label className="text-xs font-semibold text-white/40">Model Name</label>
-              <input value={localModel} onChange={e => setLocalModel(e.target.value)} type="text" className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 focus:border-primary-500 outline-none" />
-            </div>
-          </motion.div>
-        )}
+      <div className="space-y-12">
+        {/* AI Keys Section */}
+        <section className="space-y-6">
+          <div className="flex items-center justify-between">
+            <h3 className="text-[10px] font-black text-primary-400 uppercase tracking-[0.3em]">AI API Configuration</h3>
+            {keyWarning && (
+              <span className="text-[10px] font-bold text-red-400 animate-pulse uppercase tracking-tight">⚠️ Key type mismatch</span>
+            )}
+          </div>
 
-        {mode === 'OPENROUTER' && (
-          <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="space-y-6">
-            <div className="space-y-2">
-              <label className="text-xs font-semibold text-white/40">OpenRouter API Key (Free)</label>
-              <input value={openrouterKey} onChange={e => setOpenrouterKey(e.target.value)} type="password" placeholder="sk-or-v1-..." className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 focus:border-primary-500 outline-none" />
+          <div className="space-y-6 bg-white/5 p-8 rounded-3xl border border-white/10 shadow-inner">
+            <div className="flex gap-2 mb-4">
+              {(['OPENROUTER', 'GEMINI'] as const).map(m => (
+                <button
+                  key={m}
+                  onClick={() => {
+                    setCloudMode(m);
+                    if (mode !== 'LOCAL') setMode(m);
+                  }}
+                  className={twMerge(
+                    "px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all",
+                    cloudMode === m ? "bg-primary-600 text-white" : "bg-white/5 text-white/40 hover:bg-white/10"
+                  )}
+                >
+                  {m}
+                </button>
+              ))}
             </div>
-            <div className="space-y-2">
-              <label className="text-xs font-semibold text-white/40">Select Free Model</label>
-              <div className="grid grid-cols-1 gap-2">
-                {freeModels.map(m => (
-                  <button
-                    key={m.id}
-                    onClick={() => setOpenrouterModel(m.id)}
-                    className={twMerge(
-                      "text-left px-4 py-3 rounded-xl border text-sm transition-all",
-                      openrouterModel === m.id ? "bg-white/10 border-primary-500" : "bg-white/5 border-white/10 text-white/40 hover:bg-white/10"
-                    )}
-                  >
-                    {m.name}
-                  </button>
-                ))}
+            <div className="space-y-3">
+              <label className="text-[10px] font-black text-white/30 uppercase tracking-widest">
+                {cloudMode === 'GEMINI' ? 'Gemini API Key (AI Studio)' : 'OpenRouter Key'}
+              </label>
+              <input
+                value={apiKey}
+                onChange={e => setApiKey(e.target.value)}
+                type="password"
+                placeholder={cloudMode === 'GEMINI' ? "AIza..." : "sk-or-..."}
+                className={twMerge(
+                  "w-full bg-white/5 border border-white/10 rounded-2xl px-5 py-4 focus:border-primary-500 outline-none text-sm font-medium transition-all",
+                  keyWarning ? "border-red-500/50" : ""
+                )}
+              />
+              {keyWarning && (
+                <p className="text-[10px] text-red-400 font-medium">It looks like you're using {isGeminiKey ? 'a Gemini' : 'an OpenRouter'} key in the wrong tab!</p>
+              )}
+            </div>
+
+            {cloudMode === 'OPENROUTER' && (
+              <div className="space-y-3 pt-4 border-t border-white/5">
+                <label className="text-[10px] font-black text-white/30 uppercase tracking-widest">Free Model Presets</label>
+                <select
+                  value={selectedFreeModel}
+                  onChange={e => setSelectedFreeModel(e.target.value)}
+                  className="w-full bg-white/5 border border-white/10 rounded-2xl px-5 py-4 outline-none text-sm font-medium text-white/80 appearance-none cursor-pointer focus:border-primary-500"
+                >
+                  {FREE_MODELS.map(m => (
+                    <option key={m.id} value={m.id} className="bg-[#1a1a1a] text-white">{m.name}</option>
+                  ))}
+                </select>
               </div>
-            </div>
-          </motion.div>
-        )}
+            )}
+          </div>
+        </section>
 
-        {mode === 'CLOUD' && (
-          <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="space-y-4">
-            <div className="space-y-2">
-              <label className="text-xs font-semibold text-white/40">OpenAI API Key</label>
-              <input value={openaiKey} onChange={e => setOpenaiKey(e.target.value)} type="password" placeholder="sk-..." className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 focus:border-primary-500 outline-none" />
+        {/* Local AI Section */}
+        <section className="space-y-6">
+          <h3 className="text-[10px] font-black text-primary-400 uppercase tracking-[0.3em]">Local Intelligence</h3>
+          <div className="bg-white/5 p-8 rounded-3xl border border-white/10 space-y-8">
+            <div className="flex items-center justify-between">
+              <div className="flex flex-col gap-1">
+                <span className="text-sm font-black uppercase tracking-tight">Run Local Ollama</span>
+                <span className="text-[10px] font-medium text-white/20">Private & Secure indexing</span>
+              </div>
+              <button
+                onClick={() => setMode(mode === 'LOCAL' ? cloudMode : 'LOCAL')}
+                className={twMerge(
+                  "w-14 h-7 rounded-full transition-all relative border border-white/10 shadow-lg",
+                  mode === 'LOCAL' ? "bg-primary-600 shadow-primary-900/40" : "bg-white/5"
+                )}
+              >
+                <div className={twMerge(
+                  "absolute top-1 w-5 h-5 bg-white rounded-full transition-all shadow-md",
+                  mode === 'LOCAL' ? "left-8" : "left-1"
+                )} />
+              </button>
             </div>
-          </motion.div>
-        )}
+
+            {mode === 'LOCAL' && (
+              <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }} className="space-y-4 pt-6 border-t border-white/5">
+                <div className="space-y-3">
+                  <label className="text-[10px] font-black text-white/30 uppercase tracking-widest">Local Model</label>
+                  <input value={localModel} onChange={e => setLocalModel(e.target.value)} type="text" placeholder="llama3" className="w-full bg-white/5 border border-white/10 rounded-2xl px-5 py-4 focus:border-primary-500 outline-none text-sm font-medium" />
+                </div>
+              </motion.div>
+            )}
+          </div>
+        </section>
 
         <button
           onClick={saveSettings}
-          className="w-full py-4 mt-8 bg-primary-600 hover:bg-primary-500 rounded-2xl font-bold shadow-xl shadow-primary-900/20 transition-all flex items-center justify-center gap-2"
+          className="w-full py-5 bg-primary-600 hover:bg-primary-500 rounded-3xl font-black uppercase tracking-[0.2em] text-xs shadow-2xl shadow-primary-900/60 transition-all active:scale-[0.97]"
         >
-          <FileText size={20} />
-          Apply Configuration
+          Confirm Setup
         </button>
-
-        <div className="p-4 bg-primary-500/10 border border-primary-500/20 rounded-2xl text-xs text-primary-400/80 italic">
-          Tip: OpenRouter Free models are perfect for local data analysis without subscription costs.
-          Make sure to get a free key from OpenRouter.ai.
-        </div>
       </div>
     </div>
   );
