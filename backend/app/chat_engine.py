@@ -92,29 +92,43 @@ class ChatEngine:
                 )
                 if response.status_code == 200:
                     return response.json()["choices"][0]["message"]["content"]
-                elif response.status_code == 404:
-                    # Try a few reliable free models in a chain
+                
+                # If we get a failure (404, 429, 503, etc.), try automated fallbacks
+                if response.status_code in [404, 429, 503, 504]:
+                    # Most reliable free models current on OpenRouter
                     fallbacks = [
                         "google/gemini-2.0-flash-exp:free",
+                        "google/gemini-flash-1.5-8b:free",
                         "meta-llama/llama-3.1-8b-instruct:free",
-                        "mistralai/mistral-7b-instruct:free"
+                        "mistralai/mistral-7b-instruct:free",
+                        "qwen/qwen-2.5-72b-instruct:free"
                     ]
                     
                     for fallback_model in fallbacks:
-                        if current_model != fallback_model:
-                            response = requests.post(
+                        if current_model == fallback_model:
+                            continue
+                            
+                        try:
+                            fallback_resp = requests.post(
                                 url="https://openrouter.ai/api/v1/chat/completions",
-                                headers={"Authorization": f"Bearer {self.openrouter_api_key}"},
+                                headers={
+                                    "Authorization": f"Bearer {self.openrouter_api_key}",
+                                    "HTTP-Referer": "https://mcp-litelabs.local",
+                                    "X-Title": "MCP-LiteLabs",
+                                },
                                 json={
                                     "model": fallback_model,
                                     "messages": [{"role": "user", "content": prompt}],
                                     "temperature": 0.7
-                                }
+                                },
+                                timeout=10 # Short timeout for fallbacks
                             )
-                            if response.status_code == 200:
-                                return response.json()["choices"][0]["message"]["content"]
+                            if fallback_resp.status_code == 200:
+                                return fallback_resp.json()["choices"][0]["message"]["content"]
+                        except:
+                            continue
                     
-                    return f"OpenRouter Error: The model '{current_model}' is currently unavailable. Tip: Go to openrouter.ai/settings and make sure your account is verified, then select 'Llama 3.1 8B' in Settings."
+                    return f"OpenRouter Error ({response.status_code}): None of the free models responded. Tip: Go to openrouter.ai/settings and verify your email. Most free models (like Gemini) require a verified account."
                 else:
                     error_data = response.json() if response.headers.get('content-type') == 'application/json' else response.text
                     return f"OpenRouter Error: {error_data}. Tip: Check if your API key has enough credits or if the service is down."

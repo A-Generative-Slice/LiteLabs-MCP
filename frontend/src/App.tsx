@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import axios from 'axios';
-import { Send, FileText, Settings as SettingsIcon, Home, Folder, Loader2 } from 'lucide-react';
+import { Send, FileText, Settings as SettingsIcon, Home, Folder, Loader2, HelpCircle } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { twMerge } from 'tailwind-merge';
 
@@ -272,19 +272,13 @@ function App() {
             <h1 className="text-4xl font-bold bg-gradient-to-r from-primary-400 to-primary-600 bg-clip-text text-transparent">
               Local Intelligence
             </h1>
-            {activeDirectory ? (
-              <div className="flex items-center gap-2 mt-2 px-3 py-1.5 bg-primary-500/10 border border-primary-500/20 rounded-xl w-fit">
+            {activeDirectory && (
+              <div className="flex items-center gap-2 mt-4 px-3 py-1.5 bg-primary-500/10 border border-primary-500/20 rounded-xl w-fit">
                 <Folder size={14} className="text-primary-400" />
                 <span className="text-sm font-bold text-primary-400 truncate max-w-[300px]">{activeDirectory.split('/').pop()}</span>
                 <span className="text-[10px] text-white/20 font-mono hidden md:inline ml-2">{activeDirectory}</span>
               </div>
-            ) : (
-              <p className="text-white/50 mt-2 italic font-medium">Simple. Private. Powerful.</p>
             )}
-            <div className="mt-4 flex gap-2">
-              <span className="text-[10px] uppercase tracking-widest px-2 py-0.5 bg-primary-500/10 rounded border border-primary-500/20 text-primary-400/80 font-bold">Privacy First</span>
-              <span className="text-[10px] uppercase tracking-widest px-2 py-0.5 bg-primary-500/10 rounded border border-primary-500/20 text-primary-400/80 font-bold">Local RAG</span>
-            </div>
           </div>
           <div className="flex gap-4">
             <button
@@ -542,10 +536,17 @@ function FileManager() {
 }
 
 const FREE_MODELS = [
-  { name: 'Gemini 2.0 Flash (Most Reliable)', id: 'google/gemini-2.0-flash-exp:free' },
-  { name: 'Llama 3.3 70B (High Quality)', id: 'meta-llama/llama-3.3-70b-instruct:free' },
-  { name: 'Qwen 2.5 7B (Fast)', id: 'qwen/qwen-2.5-7b-instruct:free' },
-  { name: 'Llama 3.1 8B (Always Up)', id: 'meta-llama/llama-3.1-8b-instruct:free' },
+  { name: 'Llama 3.1 8B (Highly Stable)', id: 'meta-llama/llama-3.1-8b-instruct:free' },
+  { name: 'Gemini 2.0 Flash (Experimental)', id: 'google/gemini-2.0-flash-exp:free' },
+  { name: 'Gemini 1.5 Flash 8B (Fast)', id: 'google/gemini-flash-1.5-8b:free' },
+  { name: 'Mistral 7B (Reliable)', id: 'mistralai/mistral-7b-instruct:free' }
+];
+
+const RECOMMENDED_LOCAL_MODELS = [
+  { name: 'Llama 3.2 3B (Needs 4GB RAM)', id: 'llama3.2:3b' },
+  { name: 'Phi 3 Mini (Smart & Small)', id: 'phi3:mini' },
+  { name: 'Qwen 2.5 1.5B (Fast)', id: 'qwen2.5:1.5b' },
+  { name: 'Qwen 2.5 0.5B (Ultra Light - 800MB RAM)', id: 'qwen2.5:0.5b' }
 ];
 
 function SettingsView() {
@@ -697,8 +698,38 @@ function SettingsView() {
             {mode === 'LOCAL' && (
               <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }} className="space-y-4 pt-6 border-t border-white/5">
                 <div className="space-y-3">
-                  <label className="text-[10px] font-black text-white/30 uppercase tracking-widest">Local Model</label>
+                  <label className="text-[10px] font-black text-white/30 uppercase tracking-widest">Model Name</label>
                   <input value={localModel} onChange={e => setLocalModel(e.target.value)} type="text" placeholder="llama3" className="w-full bg-white/5 border border-white/10 rounded-2xl px-5 py-4 focus:border-primary-500 outline-none text-sm font-medium" />
+                </div>
+
+                <div className="space-y-3">
+                  <label className="text-[10px] font-black text-white/30 uppercase tracking-widest">Recommended Presets</label>
+                  <div className="flex flex-wrap gap-2">
+                    {RECOMMENDED_LOCAL_MODELS.map(m => (
+                      <button
+                        key={m.id}
+                        onClick={() => setLocalModel(m.id)}
+                        className={twMerge(
+                          "px-3 py-2 rounded-xl text-[10px] font-bold transition-all border",
+                          localModel === m.id ? "bg-primary-500/10 border-primary-500 text-primary-400" : "bg-white/5 border-white/10 text-white/40 hover:bg-white/10"
+                        )}
+                      >
+                        {m.name}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                <div className="p-4 bg-primary-500/5 rounded-2xl border border-primary-500/10 space-y-2">
+                  <h4 className="text-xs font-bold text-primary-400 flex items-center gap-2">
+                    <HelpCircle size={14} /> Local AI Setup Guide
+                  </h4>
+                  <p className="text-[10px] text-white/50 leading-relaxed font-medium">
+                    1. Install <a href="https://ollama.com" target="_blank" className="text-primary-400 underline italic">Ollama</a> on your Ubuntu PC.<br />
+                    2. Open your terminal and run the install command: <br />
+                    <code className="bg-black/40 px-2 py-0.5 rounded text-primary-300">ollama run {localModel}</code><br />
+                    3. Once it finishes, the app will connect automatically!
+                  </p>
                 </div>
               </motion.div>
             )}
