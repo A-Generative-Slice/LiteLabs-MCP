@@ -542,10 +542,10 @@ function FileManager() {
 }
 
 const FREE_MODELS = [
-  { name: 'Gemini 2.0 Flash (Fastest)', id: 'google/gemini-2.0-flash-exp:free' },
-  { name: 'Mistral Small 24B', id: 'mistralai/mistral-small-24b-instruct-2501:free' },
-  { name: 'Llama 3.3 70B', id: 'meta-llama/llama-3.3-70b-instruct:free' },
-  { name: 'Qwen 2 72B', id: 'qwen/qwen-2-72b-instruct:free' },
+  { name: 'Gemini 2.0 Flash (Most Reliable)', id: 'google/gemini-2.0-flash-exp:free' },
+  { name: 'Llama 3.3 70B (High Quality)', id: 'meta-llama/llama-3.3-70b-instruct:free' },
+  { name: 'Qwen 2.5 7B (Fast)', id: 'qwen/qwen-2.5-7b-instruct:free' },
+  { name: 'Llama 3.1 8B (Always Up)', id: 'meta-llama/llama-3.1-8b-instruct:free' },
 ];
 
 function SettingsView() {
@@ -569,7 +569,7 @@ function SettingsView() {
 
   const saveSettings = async () => {
     try {
-      const resp = await axios.post(`${API_BASE}/settings`, {
+      await axios.post(`${API_BASE}/settings`, {
         mode,
         openrouter_key: (mode === 'OPENROUTER' || (mode === 'LOCAL' && cloudMode === 'OPENROUTER')) ? apiKey : '',
         gemini_key: (mode === 'GEMINI' || (mode === 'LOCAL' && cloudMode === 'GEMINI')) ? apiKey : '',
@@ -644,17 +644,28 @@ function SettingsView() {
             </div>
 
             {cloudMode === 'OPENROUTER' && (
-              <div className="space-y-3 pt-4 border-t border-white/5">
-                <label className="text-[10px] font-black text-white/30 uppercase tracking-widest">Free Model Presets</label>
-                <select
-                  value={selectedFreeModel}
-                  onChange={e => setSelectedFreeModel(e.target.value)}
-                  className="w-full bg-white/5 border border-white/10 rounded-2xl px-5 py-4 outline-none text-sm font-medium text-white/80 appearance-none cursor-pointer focus:border-primary-500"
-                >
-                  {FREE_MODELS.map(m => (
-                    <option key={m.id} value={m.id} className="bg-[#1a1a1a] text-white">{m.name}</option>
-                  ))}
-                </select>
+              <div className="space-y-4 pt-6 border-t border-white/5">
+                <div className="space-y-3">
+                  <label className="text-[10px] font-black text-white/30 uppercase tracking-widest">Free Model Presets</label>
+                  <select
+                    value={selectedFreeModel}
+                    onChange={e => setSelectedFreeModel(e.target.value)}
+                    className="w-full bg-white/5 border border-white/10 rounded-2xl px-5 py-4 outline-none text-sm font-medium text-white/80 appearance-none cursor-pointer focus:border-primary-500"
+                  >
+                    {FREE_MODELS.map(m => (
+                      <option key={m.id} value={m.id} className="bg-[#1a1a1a] text-white">{m.name}</option>
+                    ))}
+                  </select>
+                </div>
+
+                <div className="p-4 bg-primary-500/5 border border-primary-500/10 rounded-2xl space-y-2">
+                  <p className="text-[10px] font-bold text-primary-400 uppercase tracking-tight">💡 Troubleshooting OpenRouter</p>
+                  <ul className="text-[10px] text-white/40 space-y-1 list-disc pl-4">
+                    <li>Verify your email at <a href="https://openrouter.ai/settings" className="text-primary-400 underline">openrouter.ai/settings</a></li>
+                    <li>Ensure "Allow Free Models" is on in your Key settings</li>
+                    <li>Try the "Llama 3.1 8B" model below if others fail</li>
+                  </ul>
+                </div>
               </div>
             )}
           </div>

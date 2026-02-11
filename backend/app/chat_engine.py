@@ -89,22 +89,28 @@ class ChatEngine:
                 if response.status_code == 200:
                     return response.json()["choices"][0]["message"]["content"]
                 elif response.status_code == 404:
-                    # Final fallback if the preset failed
-                    fallback_model = "google/gemini-2.0-flash-exp:free"
-                    if current_model != fallback_model:
-                        response = requests.post(
-                            url="https://openrouter.ai/api/v1/chat/completions",
-                            headers={"Authorization": f"Bearer {self.openrouter_api_key}"},
-                            json={
-                                "model": fallback_model,
-                                "messages": [{"role": "user", "content": prompt}],
-                                "temperature": 0.7
-                            }
-                        )
-                        if response.status_code == 200:
-                            return response.json()["choices"][0]["message"]["content"]
+                    # Try a few reliable free models in a chain
+                    fallbacks = [
+                        "google/gemini-2.0-flash-exp:free",
+                        "meta-llama/llama-3.1-8b-instruct:free",
+                        "mistralai/mistral-7b-instruct:free"
+                    ]
                     
-                    return f"OpenRouter Error: The model '{current_model}' could not be found. This usually means the model ID has changed. Try selecting a different 'Free Model Preset' in Settings."
+                    for fallback_model in fallbacks:
+                        if current_model != fallback_model:
+                            response = requests.post(
+                                url="https://openrouter.ai/api/v1/chat/completions",
+                                headers={"Authorization": f"Bearer {self.openrouter_api_key}"},
+                                json={
+                                    "model": fallback_model,
+                                    "messages": [{"role": "user", "content": prompt}],
+                                    "temperature": 0.7
+                                }
+                            )
+                            if response.status_code == 200:
+                                return response.json()["choices"][0]["message"]["content"]
+                    
+                    return f"OpenRouter Error: The model '{current_model}' is currently unavailable. Tip: Go to openrouter.ai/settings and make sure your account is verified, then select 'Llama 3.1 8B' in Settings."
                 else:
                     error_data = response.json() if response.headers.get('content-type') == 'application/json' else response.text
                     return f"OpenRouter Error: {error_data}. Tip: Check if your API key has enough credits or if the service is down."
