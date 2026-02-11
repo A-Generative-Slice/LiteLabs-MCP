@@ -12,6 +12,8 @@ class ChatEngine:
         self.openai_client = OpenAI(api_key=os.getenv("OPENAI_API_KEY")) if os.getenv("OPENAI_API_KEY") else None
         self.openrouter_api_key = os.getenv("OPENROUTER_API_KEY")
         self.gemini_key = os.getenv("GEMINI_API_KEY")
+        self.zoho_refresh_token = os.getenv("ZOHO_REFRESH_TOKEN")
+        self.zoho_access_token = None
         self.openrouter_model = os.getenv("OPENROUTER_MODEL", "google/gemini-2.0-flash-exp:free")
         self.local_base_url = os.getenv("LOCAL_MODEL_BASE_URL", "http://localhost:11434/v1")
         self.local_model = "llama3" # Default local model
@@ -63,6 +65,8 @@ class ChatEngine:
                 return f"Error from Gemini: {last_error}. None of the attempted models ({', '.join(models_to_try)}) were available for this key."
             except Exception as e:
                 return f"Error configuring Gemini: {e}. Please ensure your API key is correct."
+        elif self.mode == "ZOHO" and self.zoho_refresh_token:
+            return "Zoho Zia mode is setting up! Once we have the token, I will be able to process your voice and document queries through Zia."
         elif self.mode == "OPENROUTER" and self.openrouter_api_key:
             try:
                 # Auto-correct common outdated free model IDs
@@ -135,5 +139,5 @@ class ChatEngine:
                 return f"Could not connect to local model at {self.local_base_url}. Is Ollama running? Error: {e}"
 
     def set_mode(self, mode: str):
-        if mode in ["LOCAL", "CLOUD", "OPENROUTER", "GEMINI"]:
+        if mode in ["LOCAL", "CLOUD", "OPENROUTER", "GEMINI", "ZOHO"]:
             self.mode = mode

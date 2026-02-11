@@ -41,9 +41,11 @@ class User(BaseModel):
     username: str
 
 class QueryRequest(BaseModel):
-    text: str
+    query: Optional[str] = None
+    text: Optional[str] = None # Added for Zia SDK compatibility
     session_id: Optional[str] = None
     directory_path: Optional[str] = None
+    files: Optional[List[str]] = None
 
 class IndexRequest(BaseModel):
     directory_path: str
@@ -119,14 +121,18 @@ async def index_data(request: IndexRequest, background_tasks: BackgroundTasks):
     return {"status": "success", "message": f"Started indexing {request.directory_path} in the background"}
 
 @app.post("/query")
-async def query_data(request: QueryRequest):
-    results = rag_engine.query(request.text)
+async def query_documents(request: QueryRequest):
+    actual_query = request.query or request.text
+    if not actual_query:
+        raise HTTPException(status_code=400, detail="Query or text must be provided")
+    
+    results = rag_engine.query(actual_query)
     
     # Generate context from search results
     context = "\n\n".join([f"Source: {res['metadata']['source']}\nContent: {res['content']}" for res in results])
     
     # Generate response using ChatEngine
-    response = await chat_engine.generate_response(request.text, context)
+    response = await chat_engine.generate_response(actual_query, context)
     
     sources = [res['metadata']['source'] for res in results]
     
